@@ -32,10 +32,9 @@ Requirements:
 
 - Python 3.10 or newer
 - FFmpeg and ffprobe on `PATH`, or `FFMPEG_BIN` pointing to FFmpeg
-- An NVIDIA developer API key in `NVIDIA_API_KEY` (primary) or an OpenRouter key in `OPENROUTER_API_KEY` (fallback)
-- `nvidia-riva-client` when using NVIDIA-hosted Whisper: `python -m pip install --upgrade nvidia-riva-client`
+- A Groq API key in `GROQ_API_KEY` (primary free-access route) or an OpenRouter key in `OPENROUTER_API_KEY` (fallback)
 
-The skill extracts audio locally and sends timestamped audio chunks to NVIDIA-hosted Whisper Large v3 first, with OpenRouter Whisper as fallback. Video frames and screenshots remain local.
+The skill extracts audio locally and sends timestamped audio chunks to Groq Whisper Large v3 first, with OpenRouter Whisper as fallback. Video frames and screenshots remain local.
 
 ## Repository layout
 

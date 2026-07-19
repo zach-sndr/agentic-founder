@@ -17,7 +17,7 @@ Stay in the user's invocation root. Never change into this skill directory to pr
    python <skill-directory>/scripts/video_input.py transcribe <video> --workers 2 --chunk-seconds 600
    ```
 
-   Add `--language CODE` only when the user supplied a language. Add `--output-name SLUG` only to avoid a known collision. The command immediately creates `<invocation-root>/<video-slug>/brief.md`, then progressively fills `## Complete Transcript`. Request timestamped transcription from NVIDIA-hosted `openai/whisper-large-v3` first and use OpenRouter Whisper as fallback. Never invent timestamps when a provider omits them. Resume matching interrupted work by rerunning the exact original command, including its original `--output-name`; changing the name starts a different workspace. Choose a new name only before a fresh run when the default destination is already completed. `video-input` is a reserved name because that directory identifies older job layouts; pass a different `--output-name` if the video sanitizes to it. Jobs made by older versions under `<invocation-root>/video-input/<video-slug>/` remain discoverable and resumable when that legacy container is a real local directory, not a link or junction.
+   Add `--language CODE` only when the user supplied a language. Add `--output-name SLUG` only to avoid a known collision. The command immediately creates `<invocation-root>/<video-slug>/brief.md`, then progressively fills `## Complete Transcript`. Request timestamped `whisper-large-v3` transcription from Groq first and use OpenRouter Whisper as fallback. Never invent timestamps when a provider omits them. Resume matching interrupted work by rerunning the exact original command, including its original `--output-name`; changing the name starts a different workspace. Choose a new name only before a fresh run when the default destination is already completed. `video-input` is a reserved name because that directory identifies older job layouts; pass a different `--output-name` if the video sanitizes to it. Jobs made by older versions under `<invocation-root>/video-input/<video-slug>/` remain discoverable and resumable when that legacy container is a real local directory, not a link or junction.
 
 2. Read the complete transcript in bounded chunk order. Preserve every instruction, decision, caveat, dependency, and UI change; remove only filler and repetition. Do not invent content or timing.
 
@@ -72,6 +72,6 @@ Stay in the user's invocation root. Never change into this skill directory to pr
 
 ## Credentials
 
-Check whether `NVIDIA_API_KEY` or `OPENROUTER_API_KEY` is available. If neither key is available, read and follow [onboarding.md](onboarding.md). Do not load `onboarding.md` when either key is already configured.
+Check whether `GROQ_API_KEY` or `OPENROUTER_API_KEY` is available. If neither key is available, read and follow [onboarding.md](onboarding.md). Do not load `onboarding.md` when either key is already configured.
 
 Never print, log, or repeat credentials. On timestamp validation failure, stop without guessing timestamps. Use `status <video>` to inspect resumable progress.

@@ -1,8 +1,8 @@
 """Portable core runtime for the video-input skill.
 
-The OpenRouter route uses only the Python standard library. The NVIDIA hosted
-route loads the optional nvidia-riva-client package on demand. Media work is
-delegated to standalone ffmpeg and ffprobe programs discovered at runtime.
+The Groq and OpenRouter routes use only the Python standard library. Media
+work is delegated to standalone ffmpeg and ffprobe programs discovered at
+runtime.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import math
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -394,7 +395,7 @@ def _dotenv_values(script_dir: Path) -> dict[str, str]:
 def load_api_keys(script_dir: Path) -> dict[str, str]:
     dotenv = _dotenv_values(script_dir)
     keys = {
-        "nvidia": os.environ.get("NVIDIA_API_KEY", "").strip() or dotenv.get("NVIDIA_API_KEY", ""),
+        "groq": os.environ.get("GROQ_API_KEY", "").strip() or dotenv.get("GROQ_API_KEY", ""),
         "openrouter": os.environ.get("OPENROUTER_API_KEY", "").strip() or dotenv.get("OPENROUTER_API_KEY", ""),
     }
     available = {provider: value for provider, value in keys.items() if value}
@@ -418,101 +419,88 @@ class TimestampUnavailableError(RuntimeError):
     """Signal that a provider response cannot satisfy the no-invented-timestamps contract."""
 
 
-class NvidiaProviderError(RuntimeError):
-    """A redacted NVIDIA hosted-inference failure eligible for provider fallback."""
+class ProviderUnavailableError(RuntimeError):
+    """A redacted primary-provider failure eligible for fallback."""
 
 
-def _protobuf_seconds(value: object, label: str) -> float:
-    try:
-        if hasattr(value, "seconds"):
-            seconds = _finite_number(getattr(value, "seconds"), label)
-            nanos = _finite_number(getattr(value, "nanos", 0), label)
-            result = seconds + nanos / 1_000_000_000
-        else:
-            result = _finite_number(value, label)
-    except (TypeError, ValueError):
-        raise TimestampUnavailableError(f"NVIDIA Whisper omitted a valid {label}") from None
-    if result < 0:
-        raise TimestampUnavailableError(f"NVIDIA Whisper returned a negative {label}")
-    return result
+def _multipart_body(fields: list[tuple[str, str]], audio: bytes) -> tuple[bytes, str]:
+    boundary = "----video-input-" + secrets.token_hex(16)
+    marker = boundary.encode("ascii")
+    parts: list[bytes] = []
+    for name, value in fields:
+        parts.extend([
+            b"--" + marker + b"\r\n",
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"),
+            value.encode("utf-8"),
+            b"\r\n",
+        ])
+    parts.extend([
+        b"--" + marker + b"\r\n",
+        b'Content-Disposition: form-data; name="file"; filename="audio.flac"\r\n',
+        b"Content-Type: audio/flac\r\n\r\n",
+        audio,
+        b"\r\n--" + marker + b"--\r\n",
+    ])
+    return b"".join(parts), boundary
 
 
-class NvidiaWhisperClient:
-    SERVER = "grpc.nvcf.nvidia.com:443"
-    FUNCTION_ID = "b702f636-f60c-4a3d-a6f4-f3568c13bd7d"
-
-    def __init__(self, api_key: str, client_module: Any | None = None) -> None:
+class GroqWhisperClient:
+    def __init__(self, api_key: str, base_url: str = "https://api.groq.com") -> None:
         if not isinstance(api_key, str) or not api_key.strip():
-            raise ValueError("an NVIDIA API key is required")
+            raise ValueError("a Groq API key is required")
         if any(not 0x21 <= ord(character) <= 0x7E for character in api_key):
-            raise ValueError("the NVIDIA API key contains invalid characters")
+            raise ValueError("the Groq API key contains invalid characters")
         self._api_key = api_key
-        if client_module is None:
-            try:
-                client_module = __import__("riva.client", fromlist=["client"])
-            except ImportError:
-                raise NvidiaProviderError(
-                    "NVIDIA Whisper requires the optional nvidia-riva-client package; see onboarding.md"
-                ) from None
-        self._client = client_module
+        self._base_url = base_url.rstrip("/")
 
     def transcribe(self, audio_path: Path, language: str | None = None) -> dict[str, Any]:
         audio = Path(audio_path)
         if not audio.is_file():
             raise FileNotFoundError("audio file does not exist")
-        try:
-            auth = self._client.Auth(
-                uri=self.SERVER,
-                use_ssl=True,
-                metadata_args=[
-                    ["function-id", self.FUNCTION_ID],
-                    ["authorization", f"Bearer {self._api_key}"],
-                ],
-            )
-            service = self._client.ASRService(auth)
-            config = self._client.RecognitionConfig(
-                language_code=language or "multi",
-                max_alternatives=1,
-                enable_automatic_punctuation=True,
-                enable_word_time_offsets=True,
-            )
-            response = service.offline_recognize(audio.read_bytes(), config)
-        except (FileNotFoundError, TimestampUnavailableError):
-            raise
-        except Exception:
-            raise NvidiaProviderError(
-                "NVIDIA hosted Whisper transcription failed; the API key and provider details were redacted"
-            ) from None
-
-        segments: list[dict[str, Any]] = []
-        previous_end = -math.inf
-        for result in getattr(response, "results", ()):
-            alternatives = getattr(result, "alternatives", ())
-            if not alternatives:
-                continue
-            alternative = alternatives[0]
-            words = list(getattr(alternative, "words", ()))
-            if not words:
-                raise TimestampUnavailableError(
-                    "NVIDIA hosted Whisper returned no word timestamps"
-                )
-            start = _protobuf_seconds(getattr(words[0], "start_time", None), "word start")
-            end = _protobuf_seconds(getattr(words[-1], "end_time", None), "word end")
-            if end < start or start < previous_end:
-                raise TimestampUnavailableError(
-                    "NVIDIA hosted Whisper returned non-monotonic word timestamps"
-                )
-            text = str(getattr(alternative, "transcript", "")).strip()
-            if not text:
-                text = " ".join(str(getattr(word, "word", "")).strip() for word in words).strip()
-            if text:
-                segments.append({"start": start, "end": end, "text": text})
-            previous_end = end
-        if not segments:
-            raise TimestampUnavailableError(
-                "NVIDIA hosted Whisper returned no timestamped segments"
-            )
-        return {"segments": segments}
+        fields = [
+            ("model", "whisper-large-v3"),
+            ("response_format", "verbose_json"),
+            ("timestamp_granularities[]", "segment"),
+            ("temperature", "0"),
+        ]
+        if language is not None:
+            fields.append(("language", language))
+        body, boundary = _multipart_body(fields, audio.read_bytes())
+        endpoint = self._base_url + "/openai/v1/audio/transcriptions"
+        for attempt in range(3):
+            try:
+                req = urlrequest.Request(endpoint, data=body, method="POST", headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                })
+                with urlrequest.urlopen(req, timeout=60) as response:
+                    response_body = response.read()
+            except ValueError:
+                raise ProviderUnavailableError("Groq request could not be constructed safely") from None
+            except urlerror.HTTPError as exc:
+                status = exc.code
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                exc.close()
+                if status == 413:
+                    raise AudioTooLargeError("Groq rejected the audio chunk as too large (HTTP 413)") from None
+                transient = status == 429 or 500 <= status <= 599
+                if not transient or attempt == 2:
+                    raise ProviderUnavailableError(
+                        f"Groq transcription failed with HTTP {status}; credential details were redacted"
+                    ) from None
+                retry_text = retry_after.strip() if retry_after else ""
+                delay = min(int(retry_text), 30) if retry_text.isdigit() else 1
+            except (urlerror.URLError, TimeoutError, OSError):
+                if attempt == 2:
+                    raise TranscriptionTimeoutError("Groq transcription failed after network retries") from None
+                delay = 1
+            else:
+                try:
+                    return json.loads(response_body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    raise ProviderUnavailableError("Groq returned an invalid JSON response") from None
+            time.sleep(delay)
+        raise ProviderUnavailableError("Groq transcription failed")
 
 
 class OpenRouterClient:
@@ -572,7 +560,7 @@ class OpenRouterClient:
 
 
 class PreferredTranscriptionClient:
-    """Use NVIDIA hosted Whisper first and OpenRouter Whisper only when needed."""
+    """Use Groq Whisper first and OpenRouter Whisper only when needed."""
 
     def __init__(self, primary: Any | None, fallback: Any | None) -> None:
         if primary is None and fallback is None:
@@ -584,7 +572,7 @@ class PreferredTranscriptionClient:
         if self._primary is not None:
             try:
                 return self._primary.transcribe(audio_path, language)
-            except (NvidiaProviderError, TimestampUnavailableError, TranscriptionTimeoutError):
+            except (ProviderUnavailableError, TimestampUnavailableError, TranscriptionTimeoutError):
                 if self._fallback is None:
                     raise
         if self._fallback is None:
@@ -594,18 +582,8 @@ class PreferredTranscriptionClient:
 
 def build_transcription_client(script_dir: Path) -> PreferredTranscriptionClient:
     keys = load_api_keys(script_dir)
-    primary: Any | None = None
-    fallback: Any | None = None
-    nvidia_error: NvidiaProviderError | None = None
-    if "nvidia" in keys:
-        try:
-            primary = NvidiaWhisperClient(keys["nvidia"])
-        except NvidiaProviderError as exc:
-            nvidia_error = exc
-    if "openrouter" in keys:
-        fallback = OpenRouterClient(keys["openrouter"])
-    if primary is None and fallback is None and nvidia_error is not None:
-        raise nvidia_error
+    primary = GroqWhisperClient(keys["groq"]) if "groq" in keys else None
+    fallback = OpenRouterClient(keys["openrouter"]) if "openrouter" in keys else None
     return PreferredTranscriptionClient(primary, fallback)
 
 
