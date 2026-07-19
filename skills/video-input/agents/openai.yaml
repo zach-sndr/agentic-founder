@@ -1,0 +1,4 @@
+interface:
+  display_name: "Video Input"
+  short_description: "Turn instruction videos into illustrated briefs"
+  default_prompt: "Use $video-input to convert this instruction video into a timestamped brief with only the necessary screenshots."
