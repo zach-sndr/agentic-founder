@@ -59,7 +59,7 @@ python "$SKILL_PATH/scripts/analyze_video.py" "video.mp4" --output file
 ```
 
 ```powershell
-$script = Join-Path $env:SKILL_PATH "scripts\\analyze_video.py"
+$script = Join-Path $env:SKILL_PATH "scripts\analyze_video.py"
 python $script "video.mp4" --output file
 ```
 
@@ -100,11 +100,11 @@ python "$SKILL_PATH/scripts/analyze_video.py" "video.mp4" -hq --output file
 
 ```bash
 # Focused evidence task; regular Flash by default
-python "$SKILL_PATH/scripts/analyze_video.py" "video.mp4" \\
+python "$SKILL_PATH/scripts/analyze_video.py" "video.mp4" \
   --prompt "Find every big green frog and give timestamps." --output file
 
 # Focused task plus comprehensive report
-python "$SKILL_PATH/scripts/analyze_video.py" "video.mp4" \\
+python "$SKILL_PATH/scripts/analyze_video.py" "video.mp4" \
   --prompt "List all ingredients used." --full --high -hq --output file
 ```
 
