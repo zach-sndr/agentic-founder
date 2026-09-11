@@ -48,3 +48,19 @@ def _finite_number(value: object, label: str = "value") -> float:
     if not math.isfinite(number):
         raise ValueError(f"{label} must be finite")
     return number
+
+
+def safe_name(value: str) -> str:
+    """Return a stable, portable directory name without path traversal."""
+    if not isinstance(value, str):
+        raise TypeError("name must be a string")
+    cleaned = value.strip()
+    parts = cleaned.replace("\\", "/").split("/")
+    if any(part.strip() in {".", ".."} for part in parts):
+        raise ValueError("name cannot contain a path traversal component")
+    if any(part.strip().rstrip(".").split(".", 1)[0].lower() in _WINDOWS_RESERVED_NAMES for part in parts):
+        raise ValueError("name cannot be a Windows reserved device name")
+    result = re.sub(r"[^a-z0-9]+", "-", cleaned.lower()).strip("-")
+    if not result or result in {".", ".."}:
+        raise ValueError("name must contain letters or digits")
+    return result
