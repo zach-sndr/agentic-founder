@@ -1,54 +1,35 @@
 # Agentic Founder
 
-Open agent skills for founders and builders. Skills in this repository follow the portable `SKILL.md` format and can be installed with the [`skills` CLI](https://www.npmjs.com/package/skills).
+Custom skills Zach builds for high-performance agentic work. These are skills that are not already out there. When a pattern or process can be fully agentic — easier, custom, and advantageous — that is why the skill exists.
 
-## Install
-
-List the available skills:
+## Install the collection
 
 ```bash
-npx skills add zach-sndr/agentic-founder --list
+npx skills add zach-sndr/agentic-founder
 ```
 
-Install `video-input` interactively:
+Install one skill at a time with `--skill <name>` using the commands below.
+
+## Product Skills
+
+Product and video briefs: what’s wrong and what’s right. Developers can use these, but they are product skills.
+
+### [video-input](skills/product/video-input)
+
+Turns a product or video recording into a brief — what is wrong, what is right, and what to change. Developers can run it; it remains a product skill.
 
 ```bash
 npx skills add zach-sndr/agentic-founder --skill video-input
 ```
 
-Install it globally for Codex without prompts:
+## Social
+
+Social video work: inspect the cut frame by frame, with evidence you can check.
+
+### [video-analyze](skills/social/video-analyze)
+
+Analyzes social video frame by frame and reports timestamped evidence.
 
 ```bash
-npx skills add zach-sndr/agentic-founder --skill video-input --agent codex --global --yes
+npx skills add zach-sndr/agentic-founder --skill video-analyze
 ```
-
-## Available skills
-
-### `video-input`
-
-Convert long instruction videos, screen recordings, UI walkthroughs, and design feedback into one timestamped Markdown brief with selected screenshots.
-
-Requirements:
-
-- Python 3.10 or newer
-- FFmpeg and ffprobe on `PATH`, or `FFMPEG_BIN` pointing to FFmpeg
-- A Groq API key in `GROQ_API_KEY` (primary free-access route) or an OpenRouter key in `OPENROUTER_API_KEY` (fallback)
-
-The skill extracts audio locally and sends timestamped audio chunks to Groq Whisper Large v3 first, with OpenRouter Whisper as fallback. Video frames and screenshots remain local.
-
-## Repository layout
-
-```text
-skills/
-└── video-input/
-    ├── SKILL.md
-    ├── onboarding.md
-    ├── agents/openai.yaml
-    └── scripts/video_input.py
-```
-
-Each folder under `skills/` is independently installable. Future public skills will be added alongside `video-input`.
-
-## License
-
-MIT

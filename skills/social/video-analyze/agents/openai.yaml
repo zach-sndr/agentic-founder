@@ -1,0 +1,4 @@
+interface:
+  display_name: "Video Analyze"
+  short_description: "Analyze local videos with Gemini timestamp evidence"
+  default_prompt: "Use $video-analyze to analyze this local video with Gemini and verified timestamp coverage."
